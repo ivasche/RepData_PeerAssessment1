@@ -1,20 +1,116 @@
 # Reproducible Research: Peer Assessment 1
 
+This is a complete report for the project.
+All displayed code is written assuming that a project dir is a working dir.
 
 ## Loading and preprocessing the data
 
-
+First we read an unzipped dataset choosing appropriate formats for variables.
+```{r readzipfile}
+data<-read.csv(unzip("activity.zip"),colClasses=c("numeric","Date","factor"))
+```
 
 ## What is mean total number of steps taken per day?
 
+This chunk of code plots histograms of steps taken each day using lattice package.
+```{r histogram}
+library(lattice)
+histogram(~steps|as.factor(date),data,par.strip.text=list(cex=0.7))
+```
 
+And this piece computes and returns a table with daily mean and median values.
+```{r meanmedian}
+steps.mm<-as.data.frame(sapply(split(data$steps,as.factor(data$date)),mean,na.rm=T))
+names(steps.mm)<-"Mean"
+steps.mm$Median<-sapply(split(data$steps,as.factor(data$date)),median,na.rm=T)
+print(steps.mm)
+```
 
 ## What is the average daily activity pattern?
 
+First we compile a data frame with average number of steps per interval.
+```{r stepsperinterval}
+steps.int<-as.data.frame(sapply(split(data$steps,data$interval),mean,na.rm=T))
+steps.int$interval<-as.numeric(rownames(steps.int))
+names(steps.int)<-c("steps","interval")
+steps.int<-steps.int[order(steps.int$interval),]
+```
 
+Using the data frame constructed above one can build a graph with average number of steps taken in each interval.
+```{r stepsperinterval_chart}
+plot(x=steps.int$interval,y=steps.int$steps,type="l",xlab="Interval",ylab="Number of steps",lwd=2)
+```
+
+The following chunck computes and properly formats a 5-min interval with a max average number of steps.
+```{r maxstepsperinterval}
+m<-as.character(steps.int[(order(steps.int$steps,decreasing=T)),][1,2])
+max<-paste0(substr(m,1,1),":",substr(m,2,3))
+```
+
+The 5-min interval with a maximum average number of steps is an interval starting at `r max`.
 
 ## Imputing missing values
 
+This piece calculates the total number of missing entries.
+```{r totalnas}
+tot.na<-sum(is.na(data$steps))
+```
 
+There're total `r tot.na` NAs in the data set.
+
+The following chunk replaces NAs in the original dataset with average values per corresponding time interval using the 'plyr' package. New 'clean' dataset is saved.
+```{r replacenas}
+library(plyr)
+data.nonas<-join(data,steps.int,"interval")
+for(i in seq_along(data$steps)){
+      if(is.na(data.nonas[i,1])==TRUE){
+            data.nonas[i,1]<-data.nonas[i,4]
+      }
+}
+data.nonas<-data.nonas[,1:3]
+```
+
+Using a 'clean' dataset created above we calculate daily sums of steps taken.
+```{r summeanmedian_nonas}
+steps.sum.nonas<-as.data.frame(sapply(split(data.nonas$steps,as.factor(data.nonas$date)),sum,na.rm=T))
+names(steps.sum.nonas)<-"Sum"
+```
+
+Here's a histogram of a total number of daily steps.
+```{r histsum_nonas}
+hist(steps.sum.nonas$Sum,xlab="",main="Total daily number of steps histogram")
+```
+
+Mean total daily steps taken (rounded) are `r as.integer(mean(steps.sum.nonas$Sum))`, median is `r as.integer(median(steps.sum.nonas$Sum))`. Both values are higher compared to ones computed ignoring NAs in the dataset. This is due to chosen NAs replacement strategy (average values per corresponding interval).
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Let's first create a new factor variable with 'weekday' and 'weekend' levels.
+```{r weekdays}
+data.nonas$weekday<-weekdays(data.nonas$date)
+for(i in seq_along(data.nonas$weekday)){
+      if(data.nonas$weekday[i]=="Saturday"){
+            data.nonas$weekday[i]<-"weekend"
+      }else if(data.nonas$weekday[i]=="Sunday"){
+            data.nonas$weekday[i]<-"weekend"
+      }else{
+            data.nonas$weekday[i]<-"weekday"
+      }
+}
+data.nonas$weekday<-as.factor(data.nonas$weekday)
+```
+
+Now we create a new data frame with average number of steps per interval splitting out weekdays and weekends.
+```{r weekdays_split}
+l<-split(data.nonas,data.nonas$weekday)
+steps.int.nonas<-as.data.frame(sapply(l,function(x){sapply(split(x,x[,3]),function(y){mean(y[,1])})}))
+steps.int.nonas$interval<-as.numeric(rownames(steps.int.nonas))
+steps.int.nonas<-steps.int.nonas[order(steps.int.nonas$interval),]
+```
+
+Finally we plot average number of steps per time interval for weekdays and weekends.
+```{r weekdays_plot}
+par(mfrow=c(1,2))
+plot(x=steps.int.nonas$interval,y=steps.int.nonas$weekday,type="l",xlab="Interval",ylab="Number of steps",main="Weekdays",ylim=c(0,250),cex.axis=0.8)
+plot(x=steps.int.nonas$interval,y=steps.int.nonas$weekend,type="l",xlab="Interval",ylab="Number of steps",main="Weekends",ylim=c(0,250),cex.axis=0.8)
+```
